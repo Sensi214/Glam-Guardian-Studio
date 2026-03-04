@@ -10,6 +10,10 @@ const replicate = new Replicate({
 
 const SECRET = process.env.SENSI_GS_SHARED_SECRET;
 
+/* ------------------------------------------------
+AI IMAGE GENERATION
+------------------------------------------------ */
+
 app.post("/generate-glam", async (req, res) => {
 
   const clientSecret = req.headers["x-sensi-secret"];
@@ -50,13 +54,65 @@ app.post("/generate-glam", async (req, res) => {
     console.error(error);
 
     res.status(500).json({
-      error: "AI generation failed"
+      error: "AI image generation failed"
     });
 
   }
 
 });
 
-app.listen(3000, () => {
-  console.log("SENSI Glam Studio server running");
+/* ------------------------------------------------
+AI VIDEO GENERATION
+------------------------------------------------ */
+
+app.post("/generate-video", async (req, res) => {
+
+  const clientSecret = req.headers["x-sensi-secret"];
+
+  if (clientSecret !== SECRET) {
+    return res.status(403).json({ error: "Unauthorized request" });
+  }
+
+  const { prompt } = req.body;
+
+  try {
+
+    const output = await replicate.run(
+      "cerspense/zeroscope-v2-xl",
+      {
+        input: {
+          prompt: prompt,
+          width: 768,
+          height: 768,
+          num_frames: 24,
+          fps: 8
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      video: output
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "AI video generation failed"
+    });
+
+  }
+
+});
+
+/* ------------------------------------------------
+SERVER START
+------------------------------------------------ */
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("SENSI Glam Studio server running on port " + PORT);
 });
