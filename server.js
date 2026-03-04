@@ -1,21 +1,62 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+import express from "express";
+import Replicate from "replicate";
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
-app.get("/", (req, res) => {
-  res.send("Glam Guardian Studio is live 👑🔥");
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
 });
 
-app.get("/studio", (req, res) => {
-  res.send("Welcome to the Glam Guardian Studio");
+const SECRET = process.env.SENSI_GS_SHARED_SECRET;
+
+app.post("/generate-glam", async (req, res) => {
+
+  const clientSecret = req.headers["x-sensi-secret"];
+
+  if (clientSecret !== SECRET) {
+    return res.status(403).json({ error: "Unauthorized request" });
+  }
+
+  const { image, style } = req.body;
+
+  try {
+
+    const promptMap = {
+      magazine: "luxury fashion magazine cover, glam superhero, vogue editorial lighting, high fashion portrait",
+      catwalk: "runway fashion model walking catwalk, glam superhero couture, dramatic runway lighting",
+      redcarpet: "hollywood red carpet glamour portrait, celebrity flash photography, luxury fashion"
+    };
+
+    const prompt = promptMap[style] || promptMap.magazine;
+
+    const output = await replicate.run(
+      "black-forest-labs/flux-dev",
+      {
+        input: {
+          prompt: prompt,
+          image: image
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      image: output
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "AI generation failed"
+    });
+
+  }
+
 });
 
-const PORT = process.env.PORT || 10000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(3000, () => {
+  console.log("SENSI Glam Studio server running");
 });
