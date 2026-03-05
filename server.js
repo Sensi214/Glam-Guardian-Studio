@@ -87,7 +87,7 @@ app.post("/studio/verify", async (req, res) => {
       "price_1T7PHpGpqWf0TigzWoAIursl": "tier4",
 
       // Glam Studio
-      ""price_1T7fRlGpqWf0TigzoTC1utqr": "glam"
+      "price_1T7fRlGpqWf0TigzoTC1utqr": "glam"
 
     };
 
