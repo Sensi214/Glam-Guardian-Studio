@@ -3,6 +3,11 @@ import Replicate from "replicate";
 import Stripe from "stripe";
 
 const app = express();
+app.use(cors({
+  origin: "https://sensianduniq.com",
+  methods: ["GET","POST"],
+  allowedHeaders: ["Content-Type","X-SENSI-SECRET"]
+}));
 app.use(express.json({ limit: "10mb" }));
 
 /* ------------------------------------------------
