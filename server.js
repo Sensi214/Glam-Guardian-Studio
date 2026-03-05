@@ -1,88 +1,69 @@
 import express from "express";
 import Replicate from "replicate";
 import Stripe from "stripe";
+import cors from "cors";
 
 const app = express();
+
 app.use(cors({
-  origin: "https://sensianduniq.com",
+  origin: ["https://sensianduniq.com","https://www.sensianduniq.com"],
   methods: ["GET","POST"],
   allowedHeaders: ["Content-Type","X-SENSI-SECRET"]
 }));
-app.use(express.json({ limit: "10mb" }));
 
-/* ------------------------------------------------
-ENV VARIABLES
------------------------------------------------- */
+app.use(express.json({ limit: "10mb" }));
 
 const SECRET = process.env.SENSI_GS_SHARED_SECRET;
 
 const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
+  auth: process.env.REPLICATE_API_TOKEN
 });
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 
-/* ------------------------------------------------
-SERVER STATUS
------------------------------------------------- */
-{
-  "name": "sensi-glam-studio",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "replicate": "^0.25.2",
-    "stripe": "^16.0.0",
-    "cors": "^2.8.5"
-  }
-}
-app.get("/", (req, res) => {
+/* SERVER STATUS */
+
+app.get("/", (req,res)=>{
   res.send("SENSI Glam Studio API running.");
 });
 
 
-/* ------------------------------------------------
-STRIPE SESSION VERIFY
------------------------------------------------- */
+/* STRIPE VERIFY */
 
-app.post("/studio/verify", async (req, res) => {
+app.post("/studio/verify", async (req,res)=>{
 
   const clientSecret = req.headers["x-sensi-secret"];
 
-  if (clientSecret !== SECRET) {
-    return res.status(403).json({ error: "Unauthorized request" });
+  if(clientSecret !== SECRET){
+    return res.status(403).json({error:"Unauthorized"});
   }
 
-  const { session_id } = req.body;
+  const {session_id} = req.body;
 
-  if (!session_id) {
-    return res.status(400).json({ error: "Missing session_id" });
+  if(!session_id){
+    return res.status(400).json({error:"Missing session_id"});
   }
 
-  try {
+  try{
 
     const session = await stripe.checkout.sessions.retrieve(session_id);
 
-    if (session.payment_status !== "paid") {
-      return res.status(403).json({ error: "Payment not completed" });
+    if(session.payment_status !== "paid"){
+      return res.status(403).json({error:"Payment not complete"});
     }
 
     res.json({
-      success: true,
+      success:true,
       email: session.customer_details?.email || null
     });
 
-  } catch (error) {
+  }catch(error){
 
     console.error(error);
 
     res.status(500).json({
-      error: "Stripe verification failed"
+      error:"Stripe verification failed"
     });
 
   }
@@ -90,39 +71,30 @@ app.post("/studio/verify", async (req, res) => {
 });
 
 
-/* ------------------------------------------------
-AI IMAGE GENERATION
------------------------------------------------- */
+/* AI IMAGE GENERATION */
 
-app.post("/generate-glam", async (req, res) => {
+app.post("/generate-glam", async (req,res)=>{
 
   const clientSecret = req.headers["x-sensi-secret"];
 
-  if (clientSecret !== SECRET) {
-    return res.status(403).json({ error: "Unauthorized request" });
+  if(clientSecret !== SECRET){
+    return res.status(403).json({error:"Unauthorized"});
   }
 
-  const { image, style } = req.body;
+  const {image,style} = req.body;
 
-  if (!image) {
-    return res.status(400).json({ error: "Missing image" });
-  }
-
-  try {
+  try{
 
     const promptMap = {
 
       magazine:
-        "luxury fashion magazine cover, high fashion drag superhero, vogue editorial lighting, couture styling, dramatic makeup",
+      "luxury fashion magazine cover, glam superhero drag couture, vogue editorial lighting",
 
       catwalk:
-        "runway fashion model walking catwalk, glam drag superhero couture, dramatic runway lighting, fashion week editorial",
+      "high fashion runway model, drag superhero couture, dramatic runway lighting",
 
       redcarpet:
-        "hollywood red carpet glamour portrait, celebrity flash photography, drag superhero couture, luxury fashion",
-
-      vogue:
-        "vogue editorial fashion portrait, high fashion drag queen superhero, studio lighting, couture outfit"
+      "hollywood red carpet glam portrait, drag superhero couture, celebrity lighting"
 
     };
 
@@ -131,24 +103,24 @@ app.post("/generate-glam", async (req, res) => {
     const output = await replicate.run(
       "black-forest-labs/flux-dev",
       {
-        input: {
-          prompt: prompt,
-          image: image
+        input:{
+          prompt:prompt,
+          image:image
         }
       }
     );
 
     res.json({
-      success: true,
-      image: output
+      success:true,
+      image:output
     });
 
-  } catch (error) {
+  }catch(error){
 
     console.error(error);
 
     res.status(500).json({
-      error: "AI image generation failed"
+      error:"AI generation failed"
     });
 
   }
@@ -156,63 +128,10 @@ app.post("/generate-glam", async (req, res) => {
 });
 
 
-/* ------------------------------------------------
-AI VIDEO GENERATION
------------------------------------------------- */
-
-app.post("/generate-video", async (req, res) => {
-
-  const clientSecret = req.headers["x-sensi-secret"];
-
-  if (clientSecret !== SECRET) {
-    return res.status(403).json({ error: "Unauthorized request" });
-  }
-
-  const { prompt } = req.body;
-
-  if (!prompt) {
-    return res.status(400).json({ error: "Missing prompt" });
-  }
-
-  try {
-
-    const output = await replicate.run(
-      "cerspense/zeroscope-v2-xl",
-      {
-        input: {
-          prompt: prompt,
-          width: 768,
-          height: 768,
-          num_frames: 24,
-          fps: 8
-        }
-      }
-    );
-
-    res.json({
-      success: true,
-      video: output
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).json({
-      error: "AI video generation failed"
-    });
-
-  }
-
-});
-
-
-/* ------------------------------------------------
-SERVER START
------------------------------------------------- */
+/* SERVER START */
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`SENSI Glam Studio server running on port ${PORT}`);
+app.listen(PORT,()=>{
+  console.log("SENSI Glam Studio server running on port " + PORT);
 });
