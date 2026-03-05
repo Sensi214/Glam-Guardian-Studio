@@ -21,7 +21,21 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 /* ------------------------------------------------
 SERVER STATUS
 ------------------------------------------------ */
-
+{
+  "name": "sensi-glam-studio",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "replicate": "^0.25.2",
+    "stripe": "^16.0.0",
+    "cors": "^2.8.5"
+  }
+}
 app.get("/", (req, res) => {
   res.send("SENSI Glam Studio API running.");
 });
