@@ -72,28 +72,23 @@ app.post("/studio/verify", async (req, res) => {
 
     const priceId = session.line_items.data[0].price.id;
 
-    const priceMap = {
-
-      // Tier 1
-      "price_1SknL2GpqWf0TigzthxPyelU": "tier1",
-
-      // Tier 2
-      "price_1SknOpGpqWf0TigzpWYjScMp": "tier2",
-
-      // Tier 3
-      "price_1T7PFSGpqWf0TigzrPCD0q9k": "tier3",
-
-      // Tier 4
-      "price_1T7PHpGpqWf0TigzWoAIursl": "tier4",
-
-      // Glam Studio
-      "price_1T7OM2GpqWf0TigzgAw2SZ7y": "glam"
-
-    };
-
+    const priceMap
     const tier = priceMap[priceId];
 
-    if (!tier) {
+    if (!tier) { = {
+
+  "price_1SknL2GpqWf0TigzthxPyelU": "tier1",
+  "price_1SknOpGpqWf0TigzpWYjScMp": "tier2",
+  "price_1T7PFSGpqWf0TigzrPCD0q9k": "tier3",
+  "price_1T7PHpGpqWf0TigzWoAIursl": "tier4",
+
+  // Original Glam Studio
+  "price_1T7OM2GpqWf0TigzgAw2SZ7y": "glam",
+
+  // NEW TEST PRODUCT
+  "price_1T7fRlGpqWf0TigzoTC1utqr": "glam"
+
+};
       return res.status(400).json({
         error: "Unknown product purchased"
       });
