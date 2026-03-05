@@ -6,41 +6,20 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 
 /* ------------------------------------------------
-ENVIRONMENT
+ENV VARIABLES
 ------------------------------------------------ */
 
 const SECRET = process.env.SENSI_GS_SHARED_SECRET;
 
 const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN
+  auth: process.env.REPLICATE_API_TOKEN,
 });
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 
 /* ------------------------------------------------
-CLIENT VERIFICATION
-Protects AI endpoints from public abuse
------------------------------------------------- */
-
-function verifyClient(req, res) {
-
-  const clientSecret = req.headers["x-sensi-secret"];
-
-  if (!clientSecret || clientSecret !== SECRET) {
-    res.status(403).json({
-      error: "Unauthorized request"
-    });
-    return false;
-  }
-
-  return true;
-
-}
-
-
-/* ------------------------------------------------
-HEALTH CHECK
+SERVER STATUS
 ------------------------------------------------ */
 
 app.get("/", (req, res) => {
@@ -54,59 +33,34 @@ STRIPE SESSION VERIFY
 
 app.post("/studio/verify", async (req, res) => {
 
-  if (!verifyClient(req, res)) return;
+  const clientSecret = req.headers["x-sensi-secret"];
+
+  if (clientSecret !== SECRET) {
+    return res.status(403).json({ error: "Unauthorized request" });
+  }
 
   const { session_id } = req.body;
 
   if (!session_id) {
-    return res.status(400).json({
-      error: "Missing session_id"
-    });
+    return res.status(400).json({ error: "Missing session_id" });
   }
 
   try {
 
-    const session = await stripe.checkout.sessions.retrieve(session_id, {
-      expand: ["line_items"]
-    });
+    const session = await stripe.checkout.sessions.retrieve(session_id);
 
-    const priceId = session.line_items.data[0].price.id;
-
-    const priceMap = {
-
-      // Tier 1
-      "price_1SknL2GpqWf0TigzthxPyelU": "tier1",
-
-      // Tier 2
-      "price_1SknOpGpqWf0TigzpWYjScMp": "tier2",
-
-      // Tier 3
-      "price_1T7PFSGpqWf0TigzrPCD0q9k": "tier3",
-
-      // Tier 4
-      "price_1T7PHpGpqWf0TigzWoAIursl": "tier4",
-
-      // Glam Studio
-      "price_1T7fRlGpqWf0TigzoTC1utqr": "glam",
-
-    };
-
-    const tier = priceMap[priceId];
-
-    if (!tier) {
-      return res.status(400).json({
-        error: "Unknown product purchased"
-      });
+    if (session.payment_status !== "paid") {
+      return res.status(403).json({ error: "Payment not completed" });
     }
 
     res.json({
       success: true,
-      tier: tier
+      email: session.customer_details?.email || null
     });
 
   } catch (error) {
 
-    console.error("Stripe verification error:", error);
+    console.error(error);
 
     res.status(500).json({
       error: "Stripe verification failed"
@@ -123,22 +77,33 @@ AI IMAGE GENERATION
 
 app.post("/generate-glam", async (req, res) => {
 
-  if (!verifyClient(req, res)) return;
+  const clientSecret = req.headers["x-sensi-secret"];
+
+  if (clientSecret !== SECRET) {
+    return res.status(403).json({ error: "Unauthorized request" });
+  }
 
   const { image, style } = req.body;
+
+  if (!image) {
+    return res.status(400).json({ error: "Missing image" });
+  }
 
   try {
 
     const promptMap = {
 
       magazine:
-        "luxury fashion magazine cover, glam superhero, vogue editorial lighting, high fashion portrait",
+        "luxury fashion magazine cover, high fashion drag superhero, vogue editorial lighting, couture styling, dramatic makeup",
 
       catwalk:
-        "runway fashion model walking catwalk, glam superhero couture, dramatic runway lighting",
+        "runway fashion model walking catwalk, glam drag superhero couture, dramatic runway lighting, fashion week editorial",
 
       redcarpet:
-        "hollywood red carpet glamour portrait, celebrity flash photography, luxury fashion"
+        "hollywood red carpet glamour portrait, celebrity flash photography, drag superhero couture, luxury fashion",
+
+      vogue:
+        "vogue editorial fashion portrait, high fashion drag queen superhero, studio lighting, couture outfit"
 
     };
 
@@ -161,7 +126,7 @@ app.post("/generate-glam", async (req, res) => {
 
   } catch (error) {
 
-    console.error("AI image generation error:", error);
+    console.error(error);
 
     res.status(500).json({
       error: "AI image generation failed"
@@ -178,9 +143,17 @@ AI VIDEO GENERATION
 
 app.post("/generate-video", async (req, res) => {
 
-  if (!verifyClient(req, res)) return;
+  const clientSecret = req.headers["x-sensi-secret"];
+
+  if (clientSecret !== SECRET) {
+    return res.status(403).json({ error: "Unauthorized request" });
+  }
 
   const { prompt } = req.body;
+
+  if (!prompt) {
+    return res.status(400).json({ error: "Missing prompt" });
+  }
 
   try {
 
@@ -204,7 +177,7 @@ app.post("/generate-video", async (req, res) => {
 
   } catch (error) {
 
-    console.error("AI video generation error:", error);
+    console.error(error);
 
     res.status(500).json({
       error: "AI video generation failed"
@@ -222,5 +195,5 @@ SERVER START
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("SENSI Glam Studio server running on port " + PORT);
+  console.log(`SENSI Glam Studio server running on port ${PORT}`);
 });
