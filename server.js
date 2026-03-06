@@ -1,3 +1,6 @@
+app.get("/", (req,res)=>{
+res.send("Sensi Glam Engine running");
+});
 import express from "express";
 import cors from "cors";
 import Replicate from "replicate";
