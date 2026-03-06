@@ -1,8 +1,14 @@
-import express from "express";
-import cors from "cors";
-import Replicate from "replicate";
-
-const app = express();
-
-app.use(cors());
-app.use(express.json());
+{
+  "name": "sensi-glam-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "replicate": "^0.25.1"
+  }
+}
