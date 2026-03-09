@@ -56,7 +56,7 @@ app.post("/generate-guardian", verifySecret, async (req,res)=>{
 
   try{
 
-    const { hair, makeup, armor } = req.body;
+    const { hair, makeup, armor } = req.body || {};
 
     const basePrompt = `
 luxury high fashion superhero,
@@ -83,7 +83,7 @@ ultra detailed
         }
       );
 
-      return output;
+      return output[0];
 
     }
 
