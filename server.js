@@ -1,133 +1,78 @@
-import express from "express";
-import Replicate from "replicate";
-import Stripe from "stripe";
-import cors from "cors";
+import express from "express"
+import cors from "cors"
+import Replicate from "replicate"
 
-const app = express();
+const app = express()
 
-app.use(cors({
-  origin: ["https://sensianduniq.com","https://www.sensianduniq.com"],
-  methods: ["GET","POST"],
-  allowedHeaders: ["Content-Type","X-SENSI-SECRET"]
-}));
+app.use(cors())
+app.use(express.json())
 
-app.use(express.json({ limit: "10mb" }));
+const PORT = process.env.PORT || 3000
 
-const SECRET = process.env.SENSI_GS_SHARED_SECRET;
+const SECRET = process.env.SENSI_SECRET || "N9d8K2sF4pQ7xLmT6rV1zYwB5aH3cE8jU0gP2mK7"
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN
-});
+})
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+app.get("/", (req, res) => {
+  res.send("SENSI Glam Engine running")
+})
 
+app.post("/generate-guardian", async (req, res) => {
 
-/* SERVER STATUS */
+  const clientSecret = req.headers["x-sensi-secret"]
 
-app.get("/", (req,res)=>{
-  res.send("SENSI Glam Engine running");
-});
-
-
-/* STRIPE VERIFY */
-
-app.post("/studio/verify", async (req,res)=>{
-
-  const clientSecret = req.headers["x-sensi-secret"];
-
-  if(clientSecret !== SECRET){
-    return res.status(403).json({error:"Unauthorized"});
+  if (clientSecret !== SECRET) {
+    return res.status(403).json({ error: "Unauthorized" })
   }
 
-  const {session_id} = req.body;
+  try {
 
-  if(!session_id){
-    return res.status(400).json({error:"Missing session_id"});
-  }
+    const { hair, makeup, armor } = req.body
 
-  try{
-
-    const session = await stripe.checkout.sessions.retrieve(session_id);
-
-    if(session.payment_status !== "paid"){
-      return res.status(403).json({error:"Payment not complete"});
-    }
-
-    res.json({
-      success:true
-    });
-
-  }catch(error){
-
-    res.status(500).json({
-      error:"Stripe verification failed"
-    });
-
-  }
-
-});
-
-
-/* AI IMAGE GENERATION */
-
-app.post("/generate-glam", async (req,res)=>{
-
-  const clientSecret = req.headers["x-sensi-secret"];
-
-  if(clientSecret !== SECRET){
-    return res.status(403).json({error:"Unauthorized"});
-  }
-
-  const {image,style} = req.body;
-
-  try{
-
-    const promptMap = {
-
-      magazine:
-      "luxury fashion magazine cover, high fashion drag superhero, vogue editorial lighting",
-
-      runway:
-      "high fashion runway model drag superhero couture, dramatic runway lighting",
-
-      redcarpet:
-      "hollywood red carpet drag superhero portrait, celebrity lighting",
-
-      superhero:
-      "epic superhero poster, glam drag superhero armor, cinematic lighting"
-
-    };
-
-    const prompt = promptMap[style] || promptMap.magazine;
+    const prompt = `
+Ultra high fashion glam superhero portrait,
+${hair} hairstyle,
+${makeup} makeup,
+${armor},
+met gala level styling,
+studio lighting,
+editorial photography,
+8k ultra detailed
+`
 
     const output = await replicate.run(
-      "black-forest-labs/flux-dev",
+      "stability-ai/sdxl:latest",
       {
-        input:{
-          prompt:prompt,
-          image:image
+        input: {
+          prompt: prompt,
+          width: 1024,
+          height: 1024
         }
       }
-    );
+    )
+
+    const image = output[0]
 
     res.json({
-      success:true,
-      image:output
-    });
+      heroCard: image,
+      gala: image,
+      magazine: image
+    })
 
-  }catch(error){
+  } catch (error) {
+
+    console.error(error)
 
     res.status(500).json({
-      error:"AI generation failed"
-    });
+      error: "AI generation failed"
+    })
 
   }
 
-});
+})
 
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT,()=>{
-  console.log("SENSI Glam Studio server running on port " + PORT);
-});
+app.listen(PORT, () => {
+  console.log(`SENSI Glam Studio running on port ${PORT}`)
+})
