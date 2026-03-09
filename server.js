@@ -1,78 +1,123 @@
-import express from "express"
-import cors from "cors"
-import Replicate from "replicate"
+import express from "express";
+import cors from "cors";
+import Replicate from "replicate";
 
-const app = express()
+const app = express();
 
-app.use(cors())
-app.use(express.json())
+app.use(cors());
+app.use(express.json());
 
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 3000;
 
-const SECRET = process.env.SENSI_SECRET || "N9d8K2sF4pQ7xLmT6rV1zYwB5aH3cE8jU0gP2mK7"
+
+/* ==============================
+Replicate Setup
+============================== */
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN
-})
+});
+
+
+/* ==============================
+Health Check
+============================== */
 
 app.get("/", (req, res) => {
-  res.send("SENSI Glam Engine running")
-})
+  res.send("Sensi Glam Engine running");
+});
 
-app.post("/generate-guardian", async (req, res) => {
 
-  const clientSecret = req.headers["x-sensi-secret"]
+/* ==============================
+Security Check
+============================== */
 
-  if (clientSecret !== SECRET) {
-    return res.status(403).json({ error: "Unauthorized" })
+function verifySecret(req, res, next) {
+
+  const secret = req.headers["x-sensi-secret"];
+
+  if (secret !== process.env.SENSI_GS_SHARED_SECRET) {
+    return res.status(403).json({
+      error: "Forbidden"
+    });
   }
+
+  next();
+}
+
+
+/* ==============================
+Guardian Generator
+============================== */
+
+app.post("/generate-guardian", verifySecret, async (req, res) => {
 
   try {
 
-    const { hair, makeup, armor } = req.body
+    const { hair, makeup, armor } = req.body;
 
-    const prompt = `
-Ultra high fashion glam superhero portrait,
-${hair} hairstyle,
-${makeup} makeup,
-${armor},
-met gala level styling,
-studio lighting,
-editorial photography,
-8k ultra detailed
-`
+    const basePrompt = `
+luxury high fashion superhero,
+met gala couture armor,
+dramatic editorial lighting,
+hair style ${hair},
+makeup palette ${makeup},
+armor design ${armor},
+cinematic photography,
+ultra detailed
+`;
+
+    /* ==============================
+    Generate ONE Guardian Image
+    ============================== */
 
     const output = await replicate.run(
       "stability-ai/sdxl:latest",
       {
         input: {
-          prompt: prompt,
+          prompt: basePrompt,
           width: 1024,
           height: 1024
         }
       }
-    )
+    );
 
-    const image = output[0]
+    /* Replicate returns an array */
+    const image = output[0];
+
+    /* ==============================
+    Return Guardian Variants
+    ============================== */
 
     res.json({
+
       heroCard: image,
+
       gala: image,
+
       magazine: image
-    })
 
-  } catch (error) {
+    });
 
-    console.error(error)
+  } catch (err) {
+
+    console.error("Generation error:", err);
 
     res.status(500).json({
-      error: "AI generation failed"
-    })
+      error: "Generation failed"
+    });
 
   }
 
-})
+});
+
+
+/* ==============================
+Start Server
+============================== */
 
 app.listen(PORT, () => {
-  console.log(`SENSI Glam Studio running on port ${PORT}`)
-})
+
+  console.log("Sensi Glam Engine running on port", PORT);
+
+});
