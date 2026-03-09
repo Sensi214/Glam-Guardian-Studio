@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import sharp from "sharp";
 import Replicate from "replicate";
+import Stripe from "stripe";
 import { fileURLToPath } from "url";
 
 const app = express();
@@ -18,6 +19,7 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 const SHARED_SECRET = process.env.SENSI_GS_SHARED_SECRET;
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
 if (!PUBLIC_BASE_URL) {
   throw new Error("Missing PUBLIC_BASE_URL environment variable.");
@@ -29,6 +31,10 @@ if (!SHARED_SECRET) {
 
 if (!REPLICATE_API_TOKEN) {
   throw new Error("Missing REPLICATE_API_TOKEN environment variable.");
+}
+
+if (!STRIPE_SECRET_KEY) {
+  throw new Error("Missing STRIPE_SECRET_KEY environment variable.");
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,6 +57,8 @@ const replicate = new Replicate({
   auth: REPLICATE_API_TOKEN
 });
 
+const stripe = new Stripe(STRIPE_SECRET_KEY);
+
 /* =====================================
    Upload config
 ===================================== */
@@ -61,7 +69,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname || ".jpg") || ".jpg";
-    const safeExt = ext.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/) ? ext.toLowerCase() : ".jpg";
+    const safeExt = ext.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)
+      ? ext.toLowerCase()
+      : ".jpg";
     cb(null, `selfie-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
   }
 });
@@ -84,6 +94,7 @@ const upload = multer({
 ===================================== */
 
 const ALLOWED_HOST_FAMILIES = ["transcend", "glam-guardian"];
+
 const ALLOWED_HOSTS = [
   "transcend-male",
   "transcend-female",
@@ -328,7 +339,6 @@ app.post(
       }
 
       const selections = validation.data;
-
       const prepped = await prepSelfie(req.file.path);
       const prompt = buildBasePrompt(selections);
 
@@ -431,6 +441,45 @@ app.post(
     }
   }
 );
+
+/* =====================================
+   3) Stripe session verification
+===================================== */
+
+app.get("/verify-session", async (req, res) => {
+  try {
+    const sessionId =
+      typeof req.query.session_id === "string"
+        ? req.query.session_id.trim()
+        : "";
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing session_id"
+      });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    const isPaid = session.payment_status === "paid";
+
+    return res.json({
+      success: true,
+      paid: isPaid,
+      sessionId,
+      status: session.payment_status || "unpaid",
+      customerEmail: session.customer_details?.email || null
+    });
+  } catch (error) {
+    console.error("Stripe session verification failed:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: "Stripe verification failed."
+    });
+  }
+});
 
 /* =====================================
    Start
