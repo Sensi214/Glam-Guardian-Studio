@@ -7,26 +7,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
+
+
+/* ==============================
+Replicate Setup
+============================== */
+
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN
 });
 
-const PORT = process.env.PORT || 3000;
+
+/* ==============================
+Health Check
+============================== */
 
 app.get("/", (req,res)=>{
   res.send("Sensi Glam Engine running");
 });
+
+
+/* ==============================
+Security Check
+============================== */
 
 function verifySecret(req,res,next){
 
   const secret = req.headers["x-sensi-secret"];
 
   if(secret !== process.env.SENSI_GS_SHARED_SECRET){
-    return res.status(403).json({error:"Forbidden"});
+
+    return res.status(403).json({
+      error:"Forbidden"
+    });
+
   }
 
   next();
 }
+
+
+/* ==============================
+Guardian Generator
+============================== */
 
 app.post("/generate-guardian", verifySecret, async (req,res)=>{
 
@@ -45,10 +69,11 @@ cinematic photography,
 ultra detailed
 `;
 
+
     async function generate(prompt){
 
       const output = await replicate.run(
-        "stability-ai/sdxl",
+        "stability-ai/sdxl:latest",
         {
           input:{
             prompt:prompt,
@@ -58,18 +83,23 @@ ultra detailed
         }
       );
 
-      return output[0];
+      return output;
+
     }
 
-    const [heroCard,gala,magazine] = await Promise.all([
 
-      generate(basePrompt + " collectible hero trading card design"),
+    const heroCard = await generate(
+      basePrompt + " collectible superhero trading card design"
+    );
 
-      generate(basePrompt + " full body red carpet gala arrival photographers flashing"),
+    const gala = await generate(
+      basePrompt + " full body red carpet gala arrival photographers flashing"
+    );
 
-      generate(basePrompt + " fashion magazine cover portrait")
+    const magazine = await generate(
+      basePrompt + " fashion magazine cover portrait"
+    );
 
-    ]);
 
     res.json({
       heroCard,
@@ -77,15 +107,26 @@ ultra detailed
       magazine
     });
 
+
   }catch(err){
 
-    console.error(err);
-    res.status(500).json({error:"Generation failed"});
+    console.error("Generation error:",err);
+
+    res.status(500).json({
+      error:"Generation failed"
+    });
 
   }
 
 });
 
+
+/* ==============================
+Start Server
+============================== */
+
 app.listen(PORT, ()=>{
-  console.log("Sensi Glam Engine running");
+
+  console.log("Sensi Glam Engine running on port", PORT);
+
 });
