@@ -17,24 +17,37 @@ app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
-const SHARED_SECRET = process.env.SENSI_GS_SHARED_SECRET;
+
+/*
+  Accept any of these so your app stops breaking over env name drift.
+  Priority order keeps your current name first.
+*/
+const SHARED_SECRET =
+  process.env.SENSI_GS_SHARED_SECRET ||
+  process.env.SENSI_GUARDIAN_SHARED_SECRET ||
+  process.env.SENSI_SHARED_SECRET;
+
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+
+/*
+  Keep your existing model as default, but let env override it.
+*/
+const REPLICATE_MODEL =
+  process.env.REPLICATE_MODEL || "black-forest-labs/flux-kontext-pro";
 
 if (!PUBLIC_BASE_URL) {
   throw new Error("Missing PUBLIC_BASE_URL environment variable.");
 }
 
 if (!SHARED_SECRET) {
-  throw new Error("Missing SENSI_GS_SHARED_SECRET environment variable.");
+  throw new Error(
+    "Missing shared secret environment variable. Set SENSI_GS_SHARED_SECRET or SENSI_GUARDIAN_SHARED_SECRET."
+  );
 }
 
 if (!REPLICATE_API_TOKEN) {
   throw new Error("Missing REPLICATE_API_TOKEN environment variable.");
-}
-
-if (!STRIPE_SECRET_KEY) {
-  throw new Error("Missing STRIPE_SECRET_KEY environment variable.");
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,7 +70,10 @@ const replicate = new Replicate({
   auth: REPLICATE_API_TOKEN
 });
 
-const stripe = new Stripe(STRIPE_SECRET_KEY);
+/*
+  Keep Stripe in place, but do not let missing Stripe kill image generation.
+*/
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 /* =====================================
    Upload config
@@ -92,14 +108,6 @@ const upload = multer({
 /* =====================================
    Constants / Validation
 ===================================== */
-
-const ALLOWED_HERO_CODES = [
-  "MK", "PR", "SH", "FB", "LF", "VS", "CR", "MR", "JW"
-];
-
-const ALLOWED_GENDERS = ["Male", "Female"];
-
-const ALLOWED_VARIANT_CODES = ["", "transcend", "glamguardian"];
 
 const ALLOWED_HOST_FAMILIES = ["transcend", "glam-guardian"];
 
@@ -143,24 +151,6 @@ const ALLOWED_ARMOR = [
   "Met Gala Armor"
 ];
 
-const HERO_PROMPTS = {
-  MK: "The Memory Keeper. Theme: sacred memory, golden echoes, remembrance, wisdom, emotional preservation.",
-  PR: "The Protector. Theme: defense, guardianship, shield energy, courage, steel-blue resilience.",
-  SH: "The Shadow Healer. Theme: healing through shadow, violet mystery, emotional repair, soft underglow.",
-  FB: "The Flamebearer. Theme: ignition, rebirth, fire, ember sparks, phoenix force.",
-  LF: "The Loverfighter. Theme: passion, love, combat, red-gold energy, heartfire aura, dual flame symbolism.",
-  VS: "The Visionary. Theme: foresight, indigo data-light, future sight, silver insight, elevated perception.",
-  CR: "The Cosmic Rebel. Theme: rebellion, stardust, neon cosmos, ultraviolet freedom, anti-gravity force.",
-  MR: "The Mirror. Theme: truth, reflection, silver-iridescent distortion, revelation, mirrored power.",
-  JW: "The Joy Warrior. Theme: joy, pride-spectrum radiance, rainbow force, celebration, resilient happiness."
-};
-
-const VARIANT_PROMPTS = {
-  "": "",
-  transcend: "Variant shell: The Transcend. White-gold ascension, luminous grace, haloed purity, celestial rise.",
-  glamguardian: "Variant shell: The Glam Guardian. Luxury drag queen superhero elegance, maroon-silver couture armor, polished beauty glow, editorial glam protector."
-};
-
 /* =====================================
    Helpers
 ===================================== */
@@ -183,33 +173,11 @@ function cleanValue(value) {
 }
 
 function validateSelections(body = {}) {
-  const heroCode = cleanValue(body.heroCode);
-  const heroGender = cleanValue(body.heroGender);
-  const variantCode = cleanValue(body.variantCode);
-  const variantGender = cleanValue(body.variantGender);
-  const tierCode = cleanValue(body.tierCode);
-
   const hostFamily = cleanValue(body.hostFamily);
   const host = cleanValue(body.host);
   const hair = cleanValue(body.hair);
   const makeup = cleanValue(body.makeup);
   const armor = cleanValue(body.armor);
-
-  if (!ALLOWED_HERO_CODES.includes(heroCode)) {
-    return { valid: false, error: "Invalid hero code." };
-  }
-
-  if (heroGender && !ALLOWED_GENDERS.includes(heroGender)) {
-    return { valid: false, error: "Invalid hero gender." };
-  }
-
-  if (!ALLOWED_VARIANT_CODES.includes(variantCode)) {
-    return { valid: false, error: "Invalid variant code." };
-  }
-
-  if (variantGender && !ALLOWED_GENDERS.includes(variantGender)) {
-    return { valid: false, error: "Invalid variant gender." };
-  }
 
   if (!ALLOWED_HOST_FAMILIES.includes(hostFamily)) {
     return { valid: false, error: "Invalid host family." };
@@ -233,18 +201,7 @@ function validateSelections(body = {}) {
 
   return {
     valid: true,
-    data: {
-      heroCode,
-      heroGender,
-      variantCode,
-      variantGender,
-      tierCode,
-      hostFamily,
-      host,
-      hair,
-      makeup,
-      armor
-    }
+    data: { hostFamily, host, hair, makeup, armor }
   };
 }
 
@@ -272,39 +229,16 @@ async function prepSelfie(inputPath) {
   };
 }
 
-function buildBasePrompt({
-  heroCode,
-  heroGender,
-  variantCode,
-  variantGender,
-  hostFamily,
-  host,
-  hair,
-  makeup,
-  armor
-}) {
-  const heroPrompt = HERO_PROMPTS[heroCode] || "";
-  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
-  const expressionGender = variantCode ? (variantGender || heroGender) : heroGender;
-
+function buildBasePrompt({ hostFamily, host, hair, makeup, armor }) {
   return `
 Transform this selfie into a luxury drag queen superhero glam portrait.
 Preserve the subject's facial identity, facial proportions, bone structure, skin tone, and recognizable features.
 Keep the person looking like themselves.
-
-Core hero identity: ${heroCode}.
-${heroPrompt}
-
-Visual expression gender: ${expressionGender || "unspecified"}.
-${variantPrompt}
-
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 Hair style: ${hair}.
 Makeup palette: ${makeup}.
 Armor design: ${armor}.
-
-The final character must read as the user's matched hero identity expressed through the selected variant shell and studio styling.
 High-fashion editorial beauty.
 Met Gala luxury superhero styling.
 Polished cinematic lighting.
@@ -314,16 +248,10 @@ No text, no watermark, no extra faces, no distorted hands.
 `.trim();
 }
 
-function buildCardPrompt({ heroCode, variantCode, hostFamily, host }) {
-  const heroPrompt = HERO_PROMPTS[heroCode] || "";
-  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
-
+function buildCardPrompt({ hostFamily, host }) {
   return `
 Create a premium fantasy guardian portrait suitable for a black-and-gold Tier 4 collectible card.
 Preserve the same person's facial identity and styling consistency.
-Core hero identity: ${heroCode}.
-${heroPrompt}
-${variantPrompt}
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 Centered vertical composition, premium heroic framing, elegant lighting, collectible card art energy.
@@ -331,16 +259,10 @@ No text, no watermark.
 `.trim();
 }
 
-function buildMetGalaPrompt({ heroCode, variantCode, hostFamily, host }) {
-  const heroPrompt = HERO_PROMPTS[heroCode] || "";
-  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
-
+function buildMetGalaPrompt({ hostFamily, host }) {
   return `
 Transform into a Met Gala luxury superhero editorial portrait.
 Preserve the same person's identity.
-Core hero identity: ${heroCode}.
-${heroPrompt}
-${variantPrompt}
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 Red carpet glamour, couture armor, fashion photography, dramatic spotlight, dazzling beauty details.
@@ -348,16 +270,10 @@ No text, no watermark.
 `.trim();
 }
 
-function buildMagazinePrompt({ heroCode, variantCode, hostFamily, host }) {
-  const heroPrompt = HERO_PROMPTS[heroCode] || "";
-  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
-
+function buildMagazinePrompt({ hostFamily, host }) {
   return `
 Create a glossy magazine-cover style beauty portrait.
 Preserve the same person's identity.
-Core hero identity: ${heroCode}.
-${heroPrompt}
-${variantPrompt}
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 High-fashion close portrait, clean cover composition, editorial lighting, glamorous beauty styling.
@@ -384,15 +300,12 @@ async function getReplicateUrl(output) {
 }
 
 async function runFluxEdit({ inputImageUrl, prompt }) {
-  const output = await replicate.run(
-    "black-forest-labs/flux-kontext-pro",
-    {
-      input: {
-        input_image: inputImageUrl,
-        prompt
-      }
+  const output = await replicate.run(REPLICATE_MODEL, {
+    input: {
+      input_image: inputImageUrl,
+      prompt
     }
-  );
+  });
 
   return await getReplicateUrl(output);
 }
@@ -409,7 +322,9 @@ app.get("/health", (req, res) => {
   res.json({
     success: true,
     service: "glam-guardian-studio",
-    publicBaseUrl: PUBLIC_BASE_URL
+    publicBaseUrl: PUBLIC_BASE_URL,
+    replicateModel: REPLICATE_MODEL,
+    stripeEnabled: !!stripe
   });
 });
 
@@ -548,6 +463,13 @@ app.post(
 
 app.get("/verify-session", async (req, res) => {
   try {
+    if (!stripe) {
+      return res.status(503).json({
+        success: false,
+        error: "Stripe is not configured."
+      });
+    }
+
     const sessionId =
       typeof req.query.session_id === "string"
         ? req.query.session_id.trim()
