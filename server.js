@@ -93,6 +93,14 @@ const upload = multer({
    Constants / Validation
 ===================================== */
 
+const ALLOWED_HERO_CODES = [
+  "MK", "PR", "SH", "FB", "LF", "VS", "CR", "MR", "JW"
+];
+
+const ALLOWED_GENDERS = ["Male", "Female"];
+
+const ALLOWED_VARIANT_CODES = ["", "transcend", "glamguardian"];
+
 const ALLOWED_HOST_FAMILIES = ["transcend", "glam-guardian"];
 
 const ALLOWED_HOSTS = [
@@ -135,6 +143,24 @@ const ALLOWED_ARMOR = [
   "Met Gala Armor"
 ];
 
+const HERO_PROMPTS = {
+  MK: "The Memory Keeper. Theme: sacred memory, golden echoes, remembrance, wisdom, emotional preservation.",
+  PR: "The Protector. Theme: defense, guardianship, shield energy, courage, steel-blue resilience.",
+  SH: "The Shadow Healer. Theme: healing through shadow, violet mystery, emotional repair, soft underglow.",
+  FB: "The Flamebearer. Theme: ignition, rebirth, fire, ember sparks, phoenix force.",
+  LF: "The Loverfighter. Theme: passion, love, combat, red-gold energy, heartfire aura, dual flame symbolism.",
+  VS: "The Visionary. Theme: foresight, indigo data-light, future sight, silver insight, elevated perception.",
+  CR: "The Cosmic Rebel. Theme: rebellion, stardust, neon cosmos, ultraviolet freedom, anti-gravity force.",
+  MR: "The Mirror. Theme: truth, reflection, silver-iridescent distortion, revelation, mirrored power.",
+  JW: "The Joy Warrior. Theme: joy, pride-spectrum radiance, rainbow force, celebration, resilient happiness."
+};
+
+const VARIANT_PROMPTS = {
+  "": "",
+  transcend: "Variant shell: The Transcend. White-gold ascension, luminous grace, haloed purity, celestial rise.",
+  glamguardian: "Variant shell: The Glam Guardian. Luxury drag queen superhero elegance, maroon-silver couture armor, polished beauty glow, editorial glam protector."
+};
+
 /* =====================================
    Helpers
 ===================================== */
@@ -157,11 +183,33 @@ function cleanValue(value) {
 }
 
 function validateSelections(body = {}) {
+  const heroCode = cleanValue(body.heroCode);
+  const heroGender = cleanValue(body.heroGender);
+  const variantCode = cleanValue(body.variantCode);
+  const variantGender = cleanValue(body.variantGender);
+  const tierCode = cleanValue(body.tierCode);
+
   const hostFamily = cleanValue(body.hostFamily);
   const host = cleanValue(body.host);
   const hair = cleanValue(body.hair);
   const makeup = cleanValue(body.makeup);
   const armor = cleanValue(body.armor);
+
+  if (!ALLOWED_HERO_CODES.includes(heroCode)) {
+    return { valid: false, error: "Invalid hero code." };
+  }
+
+  if (heroGender && !ALLOWED_GENDERS.includes(heroGender)) {
+    return { valid: false, error: "Invalid hero gender." };
+  }
+
+  if (!ALLOWED_VARIANT_CODES.includes(variantCode)) {
+    return { valid: false, error: "Invalid variant code." };
+  }
+
+  if (variantGender && !ALLOWED_GENDERS.includes(variantGender)) {
+    return { valid: false, error: "Invalid variant gender." };
+  }
 
   if (!ALLOWED_HOST_FAMILIES.includes(hostFamily)) {
     return { valid: false, error: "Invalid host family." };
@@ -185,7 +233,18 @@ function validateSelections(body = {}) {
 
   return {
     valid: true,
-    data: { hostFamily, host, hair, makeup, armor }
+    data: {
+      heroCode,
+      heroGender,
+      variantCode,
+      variantGender,
+      tierCode,
+      hostFamily,
+      host,
+      hair,
+      makeup,
+      armor
+    }
   };
 }
 
@@ -213,16 +272,39 @@ async function prepSelfie(inputPath) {
   };
 }
 
-function buildBasePrompt({ hostFamily, host, hair, makeup, armor }) {
+function buildBasePrompt({
+  heroCode,
+  heroGender,
+  variantCode,
+  variantGender,
+  hostFamily,
+  host,
+  hair,
+  makeup,
+  armor
+}) {
+  const heroPrompt = HERO_PROMPTS[heroCode] || "";
+  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
+  const expressionGender = variantCode ? (variantGender || heroGender) : heroGender;
+
   return `
 Transform this selfie into a luxury drag queen superhero glam portrait.
 Preserve the subject's facial identity, facial proportions, bone structure, skin tone, and recognizable features.
 Keep the person looking like themselves.
+
+Core hero identity: ${heroCode}.
+${heroPrompt}
+
+Visual expression gender: ${expressionGender || "unspecified"}.
+${variantPrompt}
+
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 Hair style: ${hair}.
 Makeup palette: ${makeup}.
 Armor design: ${armor}.
+
+The final character must read as the user's matched hero identity expressed through the selected variant shell and studio styling.
 High-fashion editorial beauty.
 Met Gala luxury superhero styling.
 Polished cinematic lighting.
@@ -232,10 +314,16 @@ No text, no watermark, no extra faces, no distorted hands.
 `.trim();
 }
 
-function buildCardPrompt({ hostFamily, host }) {
+function buildCardPrompt({ heroCode, variantCode, hostFamily, host }) {
+  const heroPrompt = HERO_PROMPTS[heroCode] || "";
+  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
+
   return `
 Create a premium fantasy guardian portrait suitable for a black-and-gold Tier 4 collectible card.
 Preserve the same person's facial identity and styling consistency.
+Core hero identity: ${heroCode}.
+${heroPrompt}
+${variantPrompt}
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 Centered vertical composition, premium heroic framing, elegant lighting, collectible card art energy.
@@ -243,10 +331,16 @@ No text, no watermark.
 `.trim();
 }
 
-function buildMetGalaPrompt({ hostFamily, host }) {
+function buildMetGalaPrompt({ heroCode, variantCode, hostFamily, host }) {
+  const heroPrompt = HERO_PROMPTS[heroCode] || "";
+  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
+
   return `
 Transform into a Met Gala luxury superhero editorial portrait.
 Preserve the same person's identity.
+Core hero identity: ${heroCode}.
+${heroPrompt}
+${variantPrompt}
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 Red carpet glamour, couture armor, fashion photography, dramatic spotlight, dazzling beauty details.
@@ -254,10 +348,16 @@ No text, no watermark.
 `.trim();
 }
 
-function buildMagazinePrompt({ hostFamily, host }) {
+function buildMagazinePrompt({ heroCode, variantCode, hostFamily, host }) {
+  const heroPrompt = HERO_PROMPTS[heroCode] || "";
+  const variantPrompt = VARIANT_PROMPTS[variantCode] || "";
+
   return `
 Create a glossy magazine-cover style beauty portrait.
 Preserve the same person's identity.
+Core hero identity: ${heroCode}.
+${heroPrompt}
+${variantPrompt}
 Host family: ${hostFamily}.
 Character archetype: ${host}.
 High-fashion close portrait, clean cover composition, editorial lighting, glamorous beauty styling.
