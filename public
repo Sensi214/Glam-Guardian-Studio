@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<title>Guardian Video Lab</title>
+
+<style>
+
+body{
+background:#060612;
+color:white;
+font-family:Montserrat, Arial;
+text-align:center;
+padding:40px;
+}
+
+.container{
+max-width:900px;
+margin:auto;
+}
+
+.video-box{
+background:#111;
+padding:30px;
+border-radius:20px;
+margin-top:30px;
+}
+
+input, textarea{
+width:100%;
+padding:12px;
+margin-top:10px;
+border-radius:10px;
+border:none;
+}
+
+button{
+padding:14px 30px;
+margin-top:20px;
+border:none;
+border-radius:10px;
+background:#7b5cff;
+color:white;
+font-size:18px;
+cursor:pointer;
+}
+
+video{
+width:100%;
+margin-top:20px;
+border-radius:14px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Guardian Video Lab</h1>
+
+<p>Create Host Welcome Videos</p>
+
+<div class="video-box">
+
+<h2>Upload Host Image</h2>
+
+<input type="file" id="image">
+
+<h2>Voice Script</h2>
+
+<textarea id="script" rows="6">
+
+Welcome, seeker of the light.
+
+You have entered the Guardian Forge.
+
+Step forward.
+
+Reveal your true self...
+
+or forge the hero within.
+
+</textarea>
+
+<button onclick="generateVideo()">Generate Video</button>
+
+<video id="preview" controls></video>
+
+</div>
+
+</div>
+
+<script>
+
+async function generateVideo(){
+
+let image = document.getElementById("image").files[0]
+let script = document.getElementById("script").value
+
+let form = new FormData()
+
+form.append("image", image)
+form.append("script", script)
+
+let res = await fetch("/generate-host-video",{
+method:"POST",
+body:form
+})
+
+let data = await res.json()
+
+document.getElementById("preview").src = data.video
+
+}
+
+</script>
+
+</body>
+
+
+</html>
