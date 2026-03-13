@@ -457,7 +457,66 @@ app.post(
     }
   }
 );
+/* =====================================
+   3) Host Video Generator (PRIVATE TOOL)
+===================================== */
 
+app.post(
+  "/generate-host-video",
+  verifySecret,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: "Missing host image."
+        });
+      }
+
+      const script =
+        typeof req.body.script === "string"
+          ? req.body.script.trim()
+          : "";
+
+      if (!script) {
+        return res.status(400).json({
+          success: false,
+          error: "Missing script."
+        });
+      }
+
+      const imageUrl =
+        `${PUBLIC_BASE_URL}/uploads/${path.basename(req.file.path)}`;
+
+      const output = await replicate.run(
+        "lucataco/animate-diff",
+        {
+          input: {
+            image: imageUrl,
+            prompt: script
+          }
+        }
+      );
+
+      const videoUrl = await getReplicateUrl(output);
+
+      return res.json({
+        success: true,
+        video: videoUrl
+      });
+
+    } catch (error) {
+      console.error("Host video generation failed:", error);
+
+      return res.status(500).json({
+        success: false,
+        error: "Host video generation failed."
+      });
+    }
+  }
+);
 /* =====================================
    3) Stripe session verification
 ===================================== */
