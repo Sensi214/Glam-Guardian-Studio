@@ -11,18 +11,17 @@ import { fileURLToPath } from "url";
 
 const app = express();
 
-app.use(express.static("public"))
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+/* serve frontend */
+app.use(express.static("public"));
+
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 
-/*
-  Accept any of these so your app stops breaking over env name drift.
-  Priority order keeps your current name first.
-*/
+/* shared secret support */
 const SHARED_SECRET =
   process.env.SENSI_GS_SHARED_SECRET ||
   process.env.SENSI_GUARDIAN_SHARED_SECRET ||
@@ -31,130 +30,50 @@ const SHARED_SECRET =
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
-/*
-  Keep your existing model as default, but let env override it.
-*/
 const REPLICATE_MODEL =
   process.env.REPLICATE_MODEL || "black-forest-labs/flux-kontext-pro";
 
-if (!PUBLIC_BASE_URL) {
-  throw new Error("Missing PUBLIC_BASE_URL environment variable.");
-}
-
-if (!SHARED_SECRET) {
-  throw new Error(
-    "Missing shared secret environment variable. Set SENSI_GS_SHARED_SECRET or SENSI_GUARDIAN_SHARED_SECRET."
-  );
-}
-
-if (!REPLICATE_API_TOKEN) {
-  throw new Error("Missing REPLICATE_API_TOKEN environment variable.");
-}
+if (!PUBLIC_BASE_URL) throw new Error("Missing PUBLIC_BASE_URL");
+if (!SHARED_SECRET) throw new Error("Missing shared secret");
+if (!REPLICATE_API_TOKEN) throw new Error("Missing REPLICATE_API_TOKEN");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const uploadsDir = path.join(__dirname, "uploads");
 const outputDir = path.join(__dirname, "outputs");
-const tmpDir = path.join(__dirname, "tmp");
 
-[uploadsDir, outputDir, tmpDir].forEach((dir) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+[uploadsDir, outputDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
 app.use("/uploads", express.static(uploadsDir));
 app.use("/outputs", express.static(outputDir));
 
-const replicate = new Replicate({
-  auth: REPLICATE_API_TOKEN
-});
+const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
-/*
-  Keep Stripe in place, but do not let missing Stripe kill image generation.
-*/
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
-/* =====================================
-   Upload config
-===================================== */
+/* =================================
+UPLOAD
+================================ */
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || ".jpg") || ".jpg";
-    const safeExt = ext.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)
-      ? ext.toLowerCase()
-      : ".jpg";
-    cb(null, `selfie-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+    const ext = path.extname(file.originalname || ".jpg");
+    cb(null, `selfie-${Date.now()}${ext}`);
   }
 });
 
 const upload = multer({
   storage,
-  limits: {
-    fileSize: 12 * 1024 * 1024
-  },
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only image uploads are allowed."));
-    }
-    cb(null, true);
-  }
+  limits: { fileSize: 12 * 1024 * 1024 }
 });
 
-/* =====================================
-   Constants / Validation
-===================================== */
-
-const ALLOWED_HOST_FAMILIES = ["transcend", "glam-guardian"];
-
-const ALLOWED_HOSTS = [
-  "transcend-male",
-  "transcend-female",
-  "glam-male",
-  "glam-female"
-];
-
-const ALLOWED_HAIR = [
-  "Diamond Waves",
-  "Platinum Crown",
-  "Cosmic Bob",
-  "Diamond Ice Waves",
-  "Royal Glam Sweep",
-  "Prism Crown Curls"
-];
-
-const ALLOWED_MAKEUP = [
-  "solar-gold",
-  "royal-gold",
-  "diamond-silver",
-  "cosmic-purple",
-  "teal-mystic",
-  "midnight-smoke",
-  "lavender-dream",
-  "rose-glam",
-  "void-black",
-  "Solar Gold",
-  "Royal Amethyst",
-  "Diamond Frost"
-];
-
-const ALLOWED_ARMOR = [
-  "guardian-armor",
-  "met-gala",
-  "celestial",
-  "Glam Guardian Armor",
-  "Crystal Celestial Armor",
-  "Met Gala Armor"
-];
-
-/* =====================================
-   Helpers
-===================================== */
+/* =================================
+SECURITY
+================================ */
 
 function verifySecret(req, res, next) {
   const secret = req.headers["x-sensi-secret"];
@@ -169,59 +88,17 @@ function verifySecret(req, res, next) {
   next();
 }
 
-function cleanValue(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function validateSelections(body = {}) {
-  const hostFamily = cleanValue(body.hostFamily);
-  const host = cleanValue(body.host);
-  const hair = cleanValue(body.hair);
-  const makeup = cleanValue(body.makeup);
-  const armor = cleanValue(body.armor);
-
-  if (!ALLOWED_HOST_FAMILIES.includes(hostFamily)) {
-    return { valid: false, error: "Invalid host family." };
-  }
-
-  if (!ALLOWED_HOSTS.includes(host)) {
-    return { valid: false, error: "Invalid host." };
-  }
-
-  if (!ALLOWED_HAIR.includes(hair)) {
-    return { valid: false, error: "Invalid hair selection." };
-  }
-
-  if (!ALLOWED_MAKEUP.includes(makeup)) {
-    return { valid: false, error: "Invalid makeup selection." };
-  }
-
-  if (!ALLOWED_ARMOR.includes(armor)) {
-    return { valid: false, error: "Invalid armor selection." };
-  }
-
-  return {
-    valid: true,
-    data: { hostFamily, host, hair, makeup, armor }
-  };
-}
+/* =================================
+IMAGE HELPERS
+================================ */
 
 async function prepSelfie(inputPath) {
-  const filename = `prepped-${Date.now()}-${Math.round(Math.random() * 1e9)}.jpg`;
+  const filename = `prepped-${Date.now()}.jpg`;
   const outputPath = path.join(uploadsDir, filename);
 
   await sharp(inputPath)
-    .rotate()
-    .resize({
-      width: 1024,
-      height: 1024,
-      fit: "cover",
-      position: "center"
-    })
-    .jpeg({
-      quality: 92,
-      mozjpeg: true
-    })
+    .resize(1024, 1024)
+    .jpeg({ quality: 92 })
     .toFile(outputPath);
 
   return {
@@ -230,77 +107,20 @@ async function prepSelfie(inputPath) {
   };
 }
 
-function buildBasePrompt({ hostFamily, host, hair, makeup, armor }) {
-  return `
-Transform this selfie into a luxury drag queen superhero glam portrait.
-Preserve the subject's facial identity, facial proportions, bone structure, skin tone, and recognizable features.
-Keep the person looking like themselves.
-Host family: ${hostFamily}.
-Character archetype: ${host}.
-Hair style: ${hair}.
-Makeup palette: ${makeup}.
-Armor design: ${armor}.
-High-fashion editorial beauty.
-Met Gala luxury superhero styling.
-Polished cinematic lighting.
-Elegant fantasy glamour.
-Ultra detailed, premium, refined, aspirational.
-No text, no watermark, no extra faces, no distorted hands.
-`.trim();
-}
-
-function buildCardPrompt({ hostFamily, host }) {
-  return `
-Create a premium fantasy guardian portrait suitable for a black-and-gold Tier 4 collectible card.
-Preserve the same person's facial identity and styling consistency.
-Host family: ${hostFamily}.
-Character archetype: ${host}.
-Centered vertical composition, premium heroic framing, elegant lighting, collectible card art energy.
-No text, no watermark.
-`.trim();
-}
-
-function buildMetGalaPrompt({ hostFamily, host }) {
-  return `
-Transform into a Met Gala luxury superhero editorial portrait.
-Preserve the same person's identity.
-Host family: ${hostFamily}.
-Character archetype: ${host}.
-Red carpet glamour, couture armor, fashion photography, dramatic spotlight, dazzling beauty details.
-No text, no watermark.
-`.trim();
-}
-
-function buildMagazinePrompt({ hostFamily, host }) {
-  return `
-Create a glossy magazine-cover style beauty portrait.
-Preserve the same person's identity.
-Host family: ${hostFamily}.
-Character archetype: ${host}.
-High-fashion close portrait, clean cover composition, editorial lighting, glamorous beauty styling.
-No text, no watermark.
-`.trim();
-}
-
 async function getReplicateUrl(output) {
-  if (Array.isArray(output) && output.length > 0) {
+  if (Array.isArray(output)) {
     const item = output[0];
     if (typeof item === "string") return item;
-    if (item && typeof item.url === "function") return await item.url();
+    if (item.url) return await item.url();
   }
 
-  if (typeof output === "string") {
-    return output;
-  }
+  if (typeof output === "string") return output;
+  if (output.url) return await output.url();
 
-  if (output && typeof output.url === "function") {
-    return await output.url();
-  }
-
-  throw new Error("Replicate returned no usable image URL.");
+  throw new Error("No usable replicate output");
 }
 
-async function runFluxEdit({ inputImageUrl, prompt }) {
+async function runFluxEdit(inputImageUrl, prompt) {
   const output = await replicate.run(REPLICATE_MODEL, {
     input: {
       input_image: inputImageUrl,
@@ -311,9 +131,57 @@ async function runFluxEdit({ inputImageUrl, prompt }) {
   return await getReplicateUrl(output);
 }
 
-/* =====================================
-   Routes
-===================================== */
+/* =================================
+PROMPTS
+================================ */
+
+function basePrompt({ host, hair, makeup, armor }) {
+  return `
+clean luxury superhero portrait
+preserve same facial identity
+remove facial hair
+cinematic lighting
+drag queen superhero glam
+hair style: ${hair}
+makeup: ${makeup}
+armor: ${armor}
+hero archetype: ${host}
+high fashion fantasy
+no watermark
+`;
+}
+
+function cardPrompt(host) {
+  return `
+epic collectible hero card portrait
+same character
+hero archetype ${host}
+fantasy card art
+dramatic lighting
+`;
+}
+
+function metGalaPrompt(host) {
+  return `
+met gala superhero couture portrait
+same character
+hero archetype ${host}
+luxury fashion editorial
+`;
+}
+
+function magazinePrompt(host) {
+  return `
+glossy magazine cover portrait
+same character
+hero archetype ${host}
+high fashion beauty portrait
+`;
+}
+
+/* =================================
+ROUTES
+================================ */
 
 app.get("/", (req, res) => {
   res.send("Sensi Glam Engine running");
@@ -322,16 +190,14 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.json({
     success: true,
-    service: "glam-guardian-studio",
-    publicBaseUrl: PUBLIC_BASE_URL,
     replicateModel: REPLICATE_MODEL,
     stripeEnabled: !!stripe
   });
 });
 
-/* =====================================
-   1) Base guardian from selfie
-===================================== */
+/* =================================
+BASE GUARDIAN
+================================ */
 
 app.post(
   "/generate-base-guardian",
@@ -339,55 +205,31 @@ app.post(
   upload.single("selfie"),
   async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          error: "Missing selfie upload."
-        });
-      }
+      const selfie = await prepSelfie(req.file.path);
 
-      const validation = validateSelections(req.body);
-      if (!validation.valid) {
-        return res.status(400).json({
-          success: false,
-          error: validation.error
-        });
-      }
+      const image = await runFluxEdit(
+        selfie.publicUrl,
+        basePrompt(req.body)
+      );
 
-      const selections = validation.data;
-      const prepped = await prepSelfie(req.file.path);
-      const prompt = buildBasePrompt(selections);
-
-      const basePortraitUrl = await runFluxEdit({
-        inputImageUrl: prepped.publicUrl,
-        prompt
-      });
-
-      return res.json({
+      res.json({
         success: true,
-        selections,
-        input: {
-          uploadedSelfie: `${PUBLIC_BASE_URL}/uploads/${path.basename(req.file.path)}`,
-          preppedSelfie: prepped.publicUrl
-        },
-        outputs: {
-          basePortrait: basePortraitUrl
-        }
+        basePortrait: image
       });
-    } catch (error) {
-      console.error("Base guardian generation failed:", error);
+    } catch (err) {
+      console.error(err);
 
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
-        error: "Base guardian generation failed."
+        error: "Generation failed"
       });
     }
   }
 );
 
-/* =====================================
-   2) Full 3-image pack from selfie
-===================================== */
+/* =================================
+FULL GUARDIAN PACK
+================================ */
 
 app.post(
   "/generate-guardian-pack",
@@ -395,119 +237,114 @@ app.post(
   upload.single("selfie"),
   async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          error: "Missing selfie upload."
-        });
-      }
+      const selfie = await prepSelfie(req.file.path);
 
-      const validation = validateSelections(req.body);
-      if (!validation.valid) {
-        return res.status(400).json({
-          success: false,
-          error: validation.error
-        });
-      }
+      const base = await runFluxEdit(
+        selfie.publicUrl,
+        basePrompt(req.body)
+      );
 
-      const selections = validation.data;
-      const prepped = await prepSelfie(req.file.path);
-
-      const basePortraitUrl = await runFluxEdit({
-        inputImageUrl: prepped.publicUrl,
-        prompt: buildBasePrompt(selections)
-      });
-
-      const [tier4CardArt, metGalaImage, magazineImage] = await Promise.all([
-        runFluxEdit({
-          inputImageUrl: basePortraitUrl,
-          prompt: buildCardPrompt(selections)
-        }),
-        runFluxEdit({
-          inputImageUrl: basePortraitUrl,
-          prompt: buildMetGalaPrompt(selections)
-        }),
-        runFluxEdit({
-          inputImageUrl: basePortraitUrl,
-          prompt: buildMagazinePrompt(selections)
-        })
+      const [card, gala, magazine] = await Promise.all([
+        runFluxEdit(base, cardPrompt(req.body.host)),
+        runFluxEdit(base, metGalaPrompt(req.body.host)),
+        runFluxEdit(base, magazinePrompt(req.body.host))
       ]);
 
-      return res.json({
+      res.json({
         success: true,
-        selections,
-        input: {
-          uploadedSelfie: `${PUBLIC_BASE_URL}/uploads/${path.basename(req.file.path)}`,
-          preppedSelfie: prepped.publicUrl
-        },
         outputs: {
-          basePortrait: basePortraitUrl,
-          tier4CardArt,
-          metGalaImage,
-          magazineImage
+          basePortrait: base,
+          tier4Card: card,
+          metGala: gala,
+          magazine: magazine
         }
       });
-    } catch (error) {
-      console.error("Guardian pack generation failed:", error);
+    } catch (err) {
+      console.error(err);
 
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
-        error: "Guardian pack generation failed."
+        error: "Guardian pack failed"
       });
     }
   }
 );
 
-/* =====================================
-   3) Stripe session verification
-===================================== */
+/* =================================
+HOST VIDEO GENERATOR
+================================ */
+
+app.post(
+  "/generate-host-video",
+  verifySecret,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const script = req.body.script || "";
+
+      const imageUrl =
+        `${PUBLIC_BASE_URL}/uploads/${path.basename(req.file.path)}`;
+
+      const video = await replicate.run(
+        "lucataco/animate-diff",
+        {
+          input: {
+            image: imageUrl,
+            prompt: script
+          }
+        }
+      );
+
+      const videoUrl = await getReplicateUrl(video);
+
+      res.json({
+        success: true,
+        video: videoUrl
+      });
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        success: false,
+        error: "Video generation failed"
+      });
+    }
+  }
+);
+
+/* =================================
+STRIPE VERIFY
+================================ */
 
 app.get("/verify-session", async (req, res) => {
   try {
     if (!stripe) {
       return res.status(503).json({
-        success: false,
-        error: "Stripe is not configured."
+        success: false
       });
     }
 
-    const sessionId =
-      typeof req.query.session_id === "string"
-        ? req.query.session_id.trim()
-        : "";
+    const session = await stripe.checkout.sessions.retrieve(
+      req.query.session_id
+    );
 
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing session_id"
-      });
-    }
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-    const isPaid = session.payment_status === "paid";
-
-    return res.json({
+    res.json({
       success: true,
-      paid: isPaid,
-      sessionId,
-      status: session.payment_status || "unpaid",
-      customerEmail: session.customer_details?.email || null
+      paid: session.payment_status === "paid"
     });
-  } catch (error) {
-    console.error("Stripe session verification failed:", error);
+  } catch (err) {
+    console.error(err);
 
-    return res.status(500).json({
-      success: false,
-      error: "Stripe verification failed."
+    res.status(500).json({
+      success: false
     });
   }
 });
 
-/* =====================================
-   Start
-===================================== */
+/* =================================
+START SERVER
+================================ */
 
 app.listen(PORT, () => {
-  console.log(`Glam Guardian Studio running on port ${PORT}`);
+  console.log(`Guardian Engine running on ${PORT}`);
 });
