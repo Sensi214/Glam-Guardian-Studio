@@ -1,1 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forge Your Hero</title>
+  <style>
+    :root{
+      --bg1:#050814;
+      --bg2:#120a26;
+      --gold:#e7c46a;
+      --gold2:#b98a2f;
+      --text:#f6f0df;
+      --muted:#d6cdb7;
+      --panel:rgba(12,14,26,.72);
+      --panelBorder:rgba(231,196,106,.22);
+      --glow:0 0 20px rgba(231,196,106,.28);
+    }
 
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      color:var(--text);
+      font-family:Georgia, "Times New Roman", serif;
+      background:
+        radial-gradient(circle at 50% 20%, rgba(94,72,181,.35), transparent 30%),
+        radial-gradient(circle at 50% 80%, rgba(255,186,73,.18), transparent 28%),
+        radial-gradient(circle at 20% 20%, rgba(89,128,255,.15), transparent 20%),
+        linear-gradient(180deg,var(--bg2),var(--bg1));
+      overflow-x:hidden;
+    }
+
+    .stars{
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      background-image:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.7), transparent 50%),
+        radial-gradient(1.5px 1.5px at 70% 20%, rgba(255,255,255,.6), transparent 50%),
+        radial-gradient(2px 2px at 80% 70%, rgba(255,255,255,.65), transparent 50%),
+        radial-gradient(1.5px 1.5px at 30% 80%, rgba(255,255,255,.55), transparent 50%),
+        radial-gradient(2px 2px at 55% 50%, rgba(255,255,255,.7), transparent 50%);
+      opacity:.8;
+      animation: starDrift 18s linear infinite alternate;
+    }
+
+    @keyframes starDrift{
+      from{transform:translateY(0) scale(1)}
+      to{transform:translateY(-18px) scale(1.02)}
+    }
+
+    .shell{
+      max-width:1200px;
+      margin:0 auto;
+      padding:28px 18px 48px;
+      position:relative;
+      z-index:1;
+    }
+
+    .title{
+      text-align:center;
+      margin:8px 0 4px;
+      font-size:clamp(34px,5vw,58px);
+      letter-spacing:.05em;
+      color:var(--gold);
+      text-shadow:0 0 24px rgba(231,196,106,.28);
+    }
+
+    .subtitle{
+      text-align:center;
+      margin:0 auto 26px;
+      max-width:760px;
+      color:var(--muted);
+      font-size:clamp(16px,2vw,20px);
+      line-height:1.5;
+    }
+
+    .screen{
+      display:none;
+      opacity:0;
+      transform:translateY(16px);
+      transition:opacity .45s ease, transform .45s ease;
+    }
+
+    .screen.active{
+      display:block;
+      opacity:1;
+      transform:translateY(0);
+    }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--panelBorder);
+      border-radius:24px;
+      box-shadow:0 18px 50px rgba(0,0,0,.38), var(--glow);
+      backdrop-filter: blur(8px);
+      padding:26px;
+    }
+
+    .section-title{
+      text-align:center;
+      color:var(--gold);
+      font-size:clamp(24px,3vw,34px);
+      margin:0 0 8px;
+    }
+
+    .section-copy{
+      text-align:center;
+      margin:0 auto 22px;
+      color:var(--muted);
+      max-width:760px;
+      line-height:1.5;
+    }
+
+    .hero-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:18px;
+    }
+
+    .hero-tile{
+      position:relative;
+      border:1px solid rgba(231,196,106,.18);
+      background:linear-gradient(180deg, rgba(29,24,56,.72), rgba(10,12,22,.86));
+      border-radius:20px;
+      overflow:hidden;
+      cursor:pointer;
+      transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+      box-shadow:0 10px 24px rgba(0,0,0,.26);
+    }
+
+    .hero-tile:hover{
+      transform:translateY(-4px) scale(1.02);
+      border-color:rgba(231,196,106,.45);
+      box-shadow:0 0 0 1px rgba(231,196,106,.28), 0 16px 34px rgba(0,0,0,.42), 0 0 28px rgba(231,196,106,.18);
+    }
+
+    .hero-tile.selected{
+      border-color:rgba(231,196,106,.85);
+      box-shadow:0 0 0 2px rgba(231,196,106,.35), 0 0 34px rgba(231,196,106,.22);
+    }
+
+    .hero-stage{
+      position:relative;
+      height:220px;
+      background:
+        radial-gradient(circle at 50% 85%, rgba(255,210,120,.22), transparent 28%),
+        radial-gradient(circle at 50% 22%, rgba(132,97,255,.18), transparent 34%),
+        linear-gradient(180deg, rgba(33,25,70,.92), rgba(12,12,24,.96));
+      overflow:hidden;
+    }
+
+    .hero-stage::before{
+      content:"";
+      position:absolute;
+      inset:auto 10% 18px 10%;
+      height:26px;
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(231,196,106,.55), rgba(231,196,106,.08) 65%, transparent 75%);
+      filter:blur(2px);
+    }
+
+    .wing-left,.wing-right{
+      position:absolute;
+      top:40px;
+      width:88px;
+      height:130px;
+      opacity:.72;
+      filter:drop-shadow(0 0 12px rgba(255,255,255,.28));
+      animation:wingPulse 3.2s ease-in-out infinite;
+    }
+
+    .wing-left{
+      left:22px;
+      background:radial-gradient(ellipse at center, rgba(149,196,255,.95), rgba(149,196,255,.28) 55%, transparent 72%);
+      clip-path:polygon(100% 50%, 70% 0, 38% 14%, 15% 34%, 0 56%, 16% 78%, 48% 100%, 73% 86%);
+      transform:skewY(-10deg);
+    }
+
+    .wing-right{
+      right:22px;
+      background:radial-gradient(ellipse at center, rgba(255,212,124,.95), rgba(255,212,124,.28) 55%, transparent 72%);
+      clip-path:polygon(0 50%, 30% 0, 62% 14%, 85% 34%, 100% 56%, 84% 78%, 52% 100%, 27% 86%);
+      transform:skewY(10deg);
+    }
+
+    @keyframes wingPulse{
+      0%,100%{opacity:.68; transform:scale(1)}
+      50%{opacity:.95; transform:scale(1.04)}
+    }
+
+    .hero-silhouette{
+      position:absolute;
+      left:50%;
+      bottom:18px;
+      width:78px;
+      height:150px;
+      transform:translateX(-50%);
+      border-radius:34px 34px 18px 18px / 42px 42px 18px 18px;
+      background:linear-gradient(180deg, rgba(58,108,255,.98), rgba(18,36,95,.98));
+      box-shadow:0 0 18px rgba(85,140,255,.22);
+    }
+
+    .hero-silhouette::before{
+      content:"";
+      position:absolute;
+      top:-30px;
+      left:50%;
+      transform:translateX(-50%);
+      width:42px;
+      height:42px;
+      border-radius:50%;
+      background:linear-gradient(180deg, #f8e2a8, #c28d2f);
+      box-shadow:0 0 14px rgba(231,196,106,.35);
+    }
+
+    .hero-silhouette::after{
+      content:"";
+      position:absolute;
+      top:44px;
+      left:50%;
+      transform:translateX(-50%);
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,.95), rgba(168,220,255,.55) 45%, transparent 70%);
+      box-shadow:0 0 18px rgba(168,220,255,.55);
+      animation:corePulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes corePulse{
+      0%,100%{transform:translateX(-50%) scale(1)}
+      50%{transform:translateX(-50%) scale(1.16)}
+    }
+
+    .tile-meta{
+      padding:14px 14px 16px;
+      text-align:center;
+    }
+
+    .tile-name{
+      color:var(--gold);
+      font-size:20px;
+      margin-bottom:6px;
+      line-height:1.15;
+    }
+
+    .tile-desc{
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.35;
+      min-height:38px;
+    }
+
+    .upload-wrap{
+      display:grid;
+      grid-template-columns:1.2fr .8fr;
+      gap:20px;
+      align-items:start;
+    }
+
+    .upload-box{
+      border:1px dashed rgba(231,196,106,.4);
+      border-radius:20px;
+      padding:20px;
+      background:rgba(255,255,255,.03);
+    }
+
+    .upload-box input,
+    .upload-box select{
+      width:100%;
+      margin-top:12px;
+      padding:14px;
+      border-radius:14px;
+      border:1px solid rgba(231,196,106,.25);
+      background:rgba(10,10,18,.75);
+      color:#fff;
+      font-size:16px;
+    }
+
+    .preview-box{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:360px;
+      border-radius:20px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(231,196,106,.14);
+      overflow:hidden;
+      position:relative;
+    }
+
+    .preview-box img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+
+    .preview-placeholder{
+      color:var(--muted);
+      padding:24px;
+      text-align:center;
+      line-height:1.5;
+    }
+
+    .btn-row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      justify-content:center;
+      margin-top:20px;
+    }
+
+    .btn{
+      appearance:none;
+      border:none;
+      cursor:pointer;
+      padding:15px 26px;
+      border-radius:14px;
+      color:#fff;
+      font-size:17px;
+      font-weight:700;
+      letter-spacing:.02em;
+      transition:transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+    }
+
+    .btn:hover{transform:translateY(-2px)}
+    .btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
+
+    .btn-gold{
+      background:linear-gradient(180deg, #e0bc66, #9e6c19);
+      box-shadow:0 10px 26px rgba(231,196,106,.22);
+      color:#1a1304;
+    }
+
+    .btn-dark{
+      background:linear-gradient(180deg, #35285f, #1b1636);
+      border:1px solid rgba(231,196,106,.22);
+      box-shadow:0 10px 26px rgba(0,0,0,.22);
+    }
+
+    .status{
+      text-align:center;
+      color:var(--muted);
+      margin-top:10px;
+      min-height:24px;
+    }
+
+    .forge-stage{
+      min-height:420px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      text-align:center;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .energy-circle{
+      position:absolute;
+      width:320px;
+      height:320px;
+      border-radius:50%;
+      border:2px solid rgba(231,196,106,.28);
+      box-shadow:0 0 34px rgba(231,196,106,.18), inset 0 0 34px rgba(231,196,106,.12);
+      animation:spin 10s linear infinite;
+    }
+
+    .energy-circle::before,
+    .energy-circle::after{
+      content:"";
+      position:absolute;
+      inset:18px;
+      border-radius:50%;
+      border:1px solid rgba(168,220,255,.28);
+      animation:spinReverse 7s linear infinite;
+    }
+
+    .energy-circle::after{
+      inset:52px;
+      border-color:rgba(255,255,255,.18);
+      animation-duration:5s;
+    }
+
+    @keyframes spin{
+      from{transform:rotate(0)}
+      to{transform:rotate(360deg)}
+    }
+
+    @keyframes spinReverse{
+      from{transform:rotate(360deg)}
+      to{transform:rotate(0)}
+    }
+
+    .forge-copy{
+      position:relative;
+      z-index:2;
+      max-width:620px;
+    }
+
+    .forge-title{
+      color:var(--gold);
+      font-size:clamp(28px,4vw,40px);
+      margin:0 0 10px;
+      text-shadow:0 0 20px rgba(231,196,106,.25);
+    }
+
+    .forge-text{
+      color:var(--muted);
+      line-height:1.6;
+      margin:0;
+    }
+
+    .results-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:20px;
+      margin-top:18px;
+    }
+
+    .result-card{
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(231,196,106,.16);
+      border-radius:20px;
+      padding:14px;
+      box-shadow:0 12px 26px rgba(0,0,0,.24);
+      opacity:0;
+      transform:translateY(20px) scale(.98);
+    }
+
+    .result-card.reveal{
+      animation:cardReveal .7s ease forwards;
+    }
+
+    @keyframes cardReveal{
+      to{
+        opacity:1;
+        transform:translateY(0) scale(1);
+      }
+    }
+
+    .result-card img{
+      width:100%;
+      display:block;
+      border-radius:14px;
+      box-shadow:0 10px 24px rgba(0,0,0,.28);
+    }
+
+    .result-title{
+      text-align:center;
+      color:var(--gold);
+      font-size:21px;
+      margin:4px 0 14px;
+    }
+
+    .summary{
+      display:flex;
+      gap:14px;
+      flex-wrap:wrap;
+      justify-content:center;
+      margin:10px 0 0;
+      color:var(--muted);
+    }
+
+    .summary span{
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(231,196,106,.14);
+      font-size:14px;
+    }
+
+    @media (max-width: 980px){
+      .hero-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .upload-wrap{grid-template-columns:1fr}
+      .results-grid{grid-template-columns:1fr}
+    }
+
+    @media (max-width: 640px){
+      .hero-grid{grid-template-columns:1fr}
+      .shell{padding:18px 12px 32px}
+      .panel{padding:18px}
+      .hero-stage{height:200px}
+    }
+  </style>
+</head>
+<body>
+  <div class="stars"></div>
+
+  <div class="shell">
+    <div id="screenTemple" class="screen active">
+      <h1 class="title">THE TRANSCEND TEMPLE</h1>
+      <p class="subtitle">
+        Step forward. Choose the power that calls to you, then forge your hero.
+      </p>
+
+      <div class="panel">
+        <h2 class="section-title">Choose Your Archetype</h2>
+        <p class="section-copy">
+          Select the energy you want to embody. The temple is dramatic on purpose. Humans love initiation rituals. Ancient brains, shiny software.
+        </p>
+
+        <div class="hero-grid" id="heroGrid"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-gold" id="continueToUpload" disabled>Step Forward</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="screenUpload" class="screen">
+      <h1 class="title">FORGE YOUR HERO</h1>
+      <p class="subtitle">
+        Upload your selfie, choose your host path, and let the engine do the glam sorcery.
+      </p>
+
+      <div class="panel">
+        <div class="upload-wrap">
+          <div class="upload-box">
+            <label>Upload Selfie</label>
+            <input type="file" id="selfie" accept="image/*" />
+
+            <label>Studio Path</label>
+            <select id="hostFamily">
+              <option value="transcend">Transcend</option>
+              <option value="glam-guardian">Glam Guardian</option>
+            </select>
+
+            <label>Host</label>
+            <select id="host">
+              <option value="transcend-male">Transcend Male</option>
+              <option value="transcend-female">Transcend Female</option>
+              <option value="glam-male">Glam Guardian Male</option>
+              <option value="glam-female">Glam Guardian Female</option>
+            </select>
+
+            <label>Hair</label>
+            <select id="hair">
+              <option value="Diamond Waves">Diamond Waves</option>
+              <option value="Platinum Crown">Platinum Crown</option>
+              <option value="Cosmic Bob">Cosmic Bob</option>
+              <option value="Diamond Ice Waves">Diamond Ice Waves</option>
+              <option value="Royal Glam Sweep">Royal Glam Sweep</option>
+              <option value="Prism Crown Curls">Prism Crown Curls</option>
+            </select>
+
+            <label>Makeup</label>
+            <select id="makeup">
+              <option value="solar-gold">Solar Gold</option>
+              <option value="royal-gold">Royal Gold</option>
+              <option value="diamond-silver">Diamond Silver</option>
+              <option value="cosmic-purple">Cosmic Purple</option>
+              <option value="teal-mystic">Teal Mystic</option>
+              <option value="midnight-smoke">Midnight Smoke</option>
+              <option value="lavender-dream">Lavender Dream</option>
+              <option value="rose-glam">Rose Glam</option>
+              <option value="void-black">Void Black</option>
+            </select>
+
+            <label>Armor</label>
+            <select id="armor">
+              <option value="guardian-armor">Guardian Armor</option>
+              <option value="met-gala">Met Gala</option>
+              <option value="celestial">Celestial</option>
+              <option value="Glam Guardian Armor">Glam Guardian Armor</option>
+              <option value="Crystal Celestial Armor">Crystal Celestial Armor</option>
+              <option value="Met Gala Armor">Met Gala Armor</option>
+            </select>
+
+            <div class="btn-row">
+              <button class="btn btn-dark" id="backToTemple">Back</button>
+              <button class="btn btn-gold" id="forgeBtn">Forge My Hero</button>
+            </div>
+
+            <div class="status" id="uploadStatus"></div>
+          </div>
+
+          <div class="preview-box" id="previewBox">
+            <div class="preview-placeholder" id="previewPlaceholder">
+              Your uploaded selfie preview will appear here.
+            </div>
+            <img id="previewImage" style="display:none;" alt="Selfie preview" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="screenForge" class="screen">
+      <h1 class="title">THE HERO FORGE</h1>
+      <div class="panel forge-stage">
+        <div class="energy-circle"></div>
+        <div class="forge-copy">
+          <h2 class="forge-title">Awakening Your Power...</h2>
+          <p class="forge-text">
+            Wings gather. Armor forms. The chest core ignites. This takes a minute because the AI is expensive and dramatic.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div id="screenResults" class="screen">
+      <h1 class="title">YOUR GUARDIAN ARTIFACTS</h1>
+      <p class="subtitle">
+        The forge is complete. Your hero set has been revealed.
+      </p>
+
+      <div class="panel">
+        <div class="summary" id="summaryChips"></div>
+        <div class="results-grid" id="resultsGrid"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-dark" id="forgeAnother">Forge Another Hero</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SECRET = "YOUR_SHARED_SECRET_HERE";
+
+    const HEROES = [
+      {
+        key:"protector",
+        name:"The Protector",
+        desc:"Guardian energy. Stability, defense, loyalty.",
+        left:"#8ec5ff",
+        right:"#ffd27a",
+        suit:"linear-gradient(180deg,#3f78ff,#172d77)"
+      },
+      {
+        key:"joy-warrior",
+        name:"Joy Warrior",
+        desc:"Joy as power. Emotional ignition and courage.",
+        left:"#ffb0f4",
+        right:"#ffd37b",
+        suit:"linear-gradient(180deg,#ff66cb,#8a145f)"
+      },
+      {
+        key:"visionary",
+        name:"The Visionary",
+        desc:"Imagination and foresight shaping reality.",
+        left:"#b9c1ff",
+        right:"#a79cff",
+        suit:"linear-gradient(180deg,#8cb0ff,#2a4d94)"
+      },
+      {
+        key:"shadow-healer",
+        name:"Shadow Healer",
+        desc:"Healing through compassion and shadow integration.",
+        left:"#a98cff",
+        right:"#c6b0ff",
+        suit:"linear-gradient(180deg,#7d65ff,#281c61)"
+      },
+      {
+        key:"flamebearer",
+        name:"Flamebearer",
+        desc:"Rebirth, courage, unstoppable inner fire.",
+        left:"#ffb45c",
+        right:"#ffd97f",
+        suit:"linear-gradient(180deg,#ff8b2a,#772300)"
+      },
+      {
+        key:"cosmic-rebel",
+        name:"Cosmic Rebel",
+        desc:"Breaking limits and rewriting destiny.",
+        left:"#d08cff",
+        right:"#8f9cff",
+        suit:"linear-gradient(180deg,#6e3cff,#24185d)"
+      }
+    ];
+
+    const el = {
+      temple: document.getElementById("screenTemple"),
+      upload: document.getElementById("screenUpload"),
+      forge: document.getElementById("screenForge"),
+      results: document.getElementById("screenResults"),
+      heroGrid: document.getElementById("heroGrid"),
+      continueBtn: document.getElementById("continueToUpload"),
+      backBtn: document.getElementById("backToTemple"),
+      forgeBtn: document.getElementById("forgeBtn"),
+      forgeAnother: document.getElementById("forgeAnother"),
+      selfie: document.getElementById("selfie"),
+      previewImage: document.getElementById("previewImage"),
+      previewPlaceholder: document.getElementById("previewPlaceholder"),
+      previewBox: document.getElementById("previewBox"),
+      hostFamily: document.getElementById("hostFamily"),
+      host: document.getElementById("host"),
+      hair: document.getElementById("hair"),
+      makeup: document.getElementById("makeup"),
+      armor: document.getElementById("armor"),
+      uploadStatus: document.getElementById("uploadStatus"),
+      resultsGrid: document.getElementById("resultsGrid"),
+      summaryChips: document.getElementById("summaryChips")
+    };
+
+    let selectedHero = null;
+
+    function showScreen(screen){
+      [el.temple, el.upload, el.forge, el.results].forEach(s=>s.classList.remove("active"));
+      screen.classList.add("active");
+      window.scrollTo({top:0, behavior:"smooth"});
+    }
+
+    function renderHeroes(){
+      el.heroGrid.innerHTML = "";
+
+      HEROES.forEach(hero=>{
+        const tile = document.createElement("div");
+        tile.className = "hero-tile";
+        tile.dataset.hero = hero.key;
+
+        tile.innerHTML = `
+          <div class="hero-stage">
+            <div class="wing-left" style="background:radial-gradient(ellipse at center, ${hero.left}, transparent 72%)"></div>
+            <div class="wing-right" style="background:radial-gradient(ellipse at center, ${hero.right}, transparent 72%)"></div>
+            <div class="hero-silhouette" style="background:${hero.suit}"></div>
+          </div>
+          <div class="tile-meta">
+            <div class="tile-name">${hero.name}</div>
+            <div class="tile-desc">${hero.desc}</div>
+          </div>
+        `;
+
+        tile.addEventListener("click", ()=>{
+          document.querySelectorAll(".hero-tile").forEach(t=>t.classList.remove("selected"));
+          tile.classList.add("selected");
+          selectedHero = hero;
+          el.continueBtn.disabled = false;
+        });
+
+        el.heroGrid.appendChild(tile);
+      });
+    }
+
+    function updateHostOptions(){
+      const family = el.hostFamily.value;
+      const allowed = family === "transcend"
+        ? ["transcend-male","transcend-female"]
+        : ["glam-male","glam-female"];
+
+      [...el.host.options].forEach(option=>{
+        option.hidden = !allowed.includes(option.value);
+      });
+
+      if(!allowed.includes(el.host.value)){
+        el.host.value = allowed[0];
+      }
+    }
+
+    el.hostFamily.addEventListener("change", updateHostOptions);
+
+    el.selfie.addEventListener("change", ()=>{
+      const file = el.selfie.files[0];
+      if(!file) return;
+
+      const reader = new FileReader();
+      reader.onload = e=>{
+        el.previewImage.src = e.target.result;
+        el.previewImage.style.display = "block";
+        el.previewPlaceholder.style.display = "none";
+      };
+      reader.readAsDataURL(file);
+    });
+
+    el.continueBtn.addEventListener("click", ()=>{
+      showScreen(el.upload);
+    });
+
+    el.backBtn.addEventListener("click", ()=>{
+      showScreen(el.temple);
+    });
+
+    el.forgeAnother.addEventListener("click", ()=>{
+      el.resultsGrid.innerHTML = "";
+      el.summaryChips.innerHTML = "";
+      el.uploadStatus.textContent = "";
+      showScreen(el.temple);
+    });
+
+    el.forgeBtn.addEventListener("click", async ()=>{
+      const file = el.selfie.files[0];
+
+      if(!selectedHero){
+        el.uploadStatus.textContent = "Choose an archetype first.";
+        return;
+      }
+
+      if(!file){
+        el.uploadStatus.textContent = "Upload a selfie first.";
+        return;
+      }
+
+      el.uploadStatus.textContent = "";
+      showScreen(el.forge);
+
+      const form = new FormData();
+      form.append("selfie", file);
+      form.append("hostFamily", el.hostFamily.value);
+      form.append("host", el.host.value);
+      form.append("hair", el.hair.value);
+      form.append("makeup", el.makeup.value);
+      form.append("armor", el.armor.value);
+      form.append("archetype", selectedHero.key);
+
+      try{
+        const response = await fetch("/generate-guardian-pack", {
+          method:"POST",
+          headers:{
+            "x-sensi-secret": SECRET
+          },
+          body: form
+        });
+
+        const payload = await response.json();
+
+        if(!response.ok || !payload.success){
+          throw new Error(payload.error || "Guardian pack generation failed.");
+        }
+
+        showResults(payload);
+      }catch(error){
+        showScreen(el.upload);
+        el.uploadStatus.textContent = error.message || "Something went sideways in the forge.";
+      }
+    });
+
+    function showResults(payload){
+      const outputs = payload.outputs || {};
+
+      const cards = [
+        { title:"Base Guardian", image: outputs.basePortrait },
+        { title:"Tier 4 Card Art", image: outputs.tier4CardArt },
+        { title:"Met Gala Image", image: outputs.metGalaImage },
+        { title:"Magazine Cover Image", image: outputs.magazineImage }
+      ].filter(item => item.image);
+
+      el.summaryChips.innerHTML = `
+        <span>${selectedHero ? selectedHero.name : "Archetype Locked"}</span>
+        <span>${el.hostFamily.value}</span>
+        <span>${el.host.value}</span>
+      `;
+
+      el.resultsGrid.innerHTML = "";
+
+      showScreen(el.results);
+
+      cards.forEach((card, index)=>{
+        const wrap = document.createElement("div");
+        wrap.className = "result-card";
+        wrap.innerHTML = `
+          <div class="result-title">${card.title}</div>
+          <img src="${card.image}" alt="${card.title}" />
+        `;
+        el.resultsGrid.appendChild(wrap);
+
+        setTimeout(()=>{
+          wrap.classList.add("reveal");
+        }, 500 + (index * 750));
+      });
+    }
+
+    renderHeroes();
+    updateHostOptions();
+  </script>
+</body>
+</html>
